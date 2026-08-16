@@ -1,0 +1,849 @@
+for _, obj in pairs(workspace:GetDescendants()) do
+	if obj:IsA("ProximityPrompt") then
+		pcall(function()
+			obj.HoldDuration = 0
+		end)
+	end
+end
+
+game:GetService("ProximityPromptService").PromptButtonHoldBegan:Connect(function(prompt)
+	pcall(function()
+		prompt.HoldDuration = 0
+	end)
+end)
+local P = game:GetService("Players")
+local R = game:GetService("RunService")
+local U = game:GetService("UserInputService")
+local C = game:GetService("CoreGui")
+local W = game:GetService("Workspace")
+local L = game:GetService("Lighting")
+local H = game:GetService("HttpService")
+local T = game:GetService("TeleportService")
+local PPS = game:GetService("ProximityPromptService")
+
+local lp = P.LocalPlayer
+local cam = W.CurrentCamera
+local mouse = lp:GetMouse()
+local root_ui = gethui and gethui() or C
+
+local st = {
+	sp = false,
+	sp_phys = false,
+	sp_v = 16,
+	jump = false,
+	clip = false,
+	esp = false,
+	fog = false,
+	fb = false,
+	fov_l = false,
+	fov_v = 70,
+	aim = false,
+	aim_p = "Head",
+	aim_f = 200,
+	aim_s = 5,
+	aim_d = 500,
+	aim_t = false,
+	ex_e = false,
+	ex_l = {},
+	f_p = 30000,
+	f_r = 5000,
+	f_t = nil,
+	f_a = false,
+	ft_m = nil,
+	ft_b = false,
+	fc_b = false,
+	ghost = false,
+	m_k = Enum.KeyCode.RightShift,
+	c_n = "Default",
+}
+
+local conns = {}
+local fling_conn = nil
+local old_m_b = Enum.MouseBehavior.Default
+local old_m_v = true
+
+local active_vf = nil
+local active_att = nil
+
+local function conn(sig, func)
+	local c = sig:Connect(func)
+	table.insert(conns, c)
+	return c
+end
+
+local function get_char()
+	local c = lp.Character
+	if not c then
+		return nil, nil, nil
+	end
+	return c, c:FindFirstChild("HumanoidRootPart"), c:FindFirstChildOfClass("Humanoid")
+end
+
+for _, v in pairs(root_ui:GetChildren()) do
+	if v.Name == "WindUI" or v.Name == "故雪Intro" then
+		pcall(function()
+			v:Destroy()
+		end)
+	end
+end
+
+local WindUI = loadstring(game:HttpGet("https://raw.githubusercontent.com/Footagesus/WindUI/main/dist/main.lua"))()
+
+local function notify(t, txt)
+	WindUI:Notify({ Title = t, Content = txt .. "喵~", Duration = 3 })
+end
+
+local win = WindUI:CreateWindow({
+	Title = "故脚本 Pro",
+	Icon = "zap",
+	Author = "by.故雪",
+	Folder = "GuXueData",
+	Size = UDim2.fromOffset(580, 460),
+	Transparent = true,
+	Theme = "Dark",
+})
+
+win:EditOpenButton({
+	Title = "打开ui",
+	Icon = "monitor",
+	CornerRadius = UDim.new(0, 16),
+	StrokeThickness = 2,
+	Color = ColorSequence.new( -- gradient
+		Color3.fromHex("FF0F7B"),
+		Color3.fromHex("F89B29")
+	),
+	OnlyMobile = false,
+	Enabled = true,
+	Draggable = true,
+})
+
+win:SetToggleKey(Enum.KeyCode.Insert)
+
+-- 设置始终置顶 (Always On Top)
+local gui = root_ui:WaitForChild("WindUI")
+gui.DisplayOrder = 2147483647 -- 设置为最大渲染层级
+
+local unlock = Instance.new("TextButton", gui)
+unlock.Name = "GX"
+unlock.Size = UDim2.new(0, 0, 0, 0)
+unlock.BackgroundTransparency = 1
+unlock.Visible = true
+unlock.Modal = false
+
+local function toggle_ui(b)
+	if b then
+		old_m_b = U.MouseBehavior
+		old_m_v = U.MouseIconEnabled
+		gui.Enabled = true
+		unlock.Modal = false
+		R:BindToRenderStep("GX_M", 2000, function()
+			U.MouseIconEnabled = true
+			if U:IsMouseButtonPressed(Enum.UserInputType.MouseButton2) then
+				U.MouseBehavior = Enum.MouseBehavior.LockCurrentPosition
+			else
+				U.MouseBehavior = Enum.MouseBehavior.Default
+			end
+		end)
+	else
+		R:UnbindFromRenderStep("GX_M")
+		gui.Enabled = false
+		unlock.Modal = false
+		U.MouseBehavior = old_m_b
+		U.MouseIconEnabled = old_m_v
+	end
+end
+
+local function ghost()
+	st.ghost = not st.ghost
+	local c, r, h = get_char()
+	if st.ghost then
+		if r then
+			r.Anchored = true
+		end
+		local p = cam.CFrame.Position
+		local rx, ry = 0, 0
+		cam.CameraType = Enum.CameraType.Scriptable
+		R:BindToRenderStep("GX_G", 201, function()
+			local d = U:GetMouseDelta()
+			ry = ry - d.X * 0.4
+			rx = math.clamp(rx - d.Y * 0.4, -85, 85)
+			local cr = CFrame.fromEulerAnglesYXZ(math.rad(rx), math.rad(ry), 0)
+			local dir = Vector3.zero
+			if U:IsKeyDown(Enum.KeyCode.W) then
+				dir += cr.LookVector
+			end
+			if U:IsKeyDown(Enum.KeyCode.S) then
+				dir -= cr.LookVector
+			end
+			if U:IsKeyDown(Enum.KeyCode.A) then
+				dir -= cr.RightVector
+			end
+			if U:IsKeyDown(Enum.KeyCode.D) then
+				dir += cr.RightVector
+			end
+			if U:IsKeyDown(Enum.KeyCode.E) then
+				dir += Vector3.new(0, 1, 0)
+			end
+			if U:IsKeyDown(Enum.KeyCode.Q) then
+				dir -= Vector3.new(0, 1, 0)
+			end
+			p = p + dir * (U:IsKeyDown(Enum.KeyCode.LeftShift) and 3 or 1)
+			cam.CFrame = CFrame.new(p) * cr
+			U.MouseBehavior = Enum.MouseBehavior.LockCenter
+		end)
+	else
+		R:UnbindFromRenderStep("GX_G")
+		cam.CameraType = Enum.CameraType.Custom
+		task.wait()
+		local _, _, h2 = get_char()
+		if h2 then
+			cam.CameraSubject = h2
+		end
+		if r then
+			r.Anchored = false
+		end
+		U.MouseBehavior = Enum.MouseBehavior.Default
+		U.MouseIconEnabled = true
+	end
+end
+
+local t1 = win:Tab({
+	Title = "移动",
+	Icon = "zap",
+})
+
+local s1 = t1:Section({
+	Title = "速度设置",
+	Icon = "zap",
+})
+
+local sp_cf_toggle
+local sp_phys_toggle
+
+sp_cf_toggle = s1:Toggle({
+	Title = "坐标速度 (CFrame)",
+	Value = false,
+	Callback = function(v)
+		st.sp = v
+		if v and st.sp_phys then
+			sp_phys_toggle:SetValue(false)
+		end
+	end,
+})
+
+sp_phys_toggle = s1:Toggle({
+	Title = "物理速度 (VectorForce)",
+	Value = false,
+	Callback = function(v)
+		st.sp_phys = v
+		if v and st.sp then
+			sp_cf_toggle:SetValue(false)
+		end
+	end,
+})
+
+s1:Slider({
+	Title = "数值",
+	Step = 1,
+	Value = { Min = 0, Max = 3000, Default = 16 },
+	Callback = function(v)
+		st.sp_v = v
+	end,
+})
+
+local s2 = t1:Section({
+	Title = "增强",
+	Icon = "shield",
+})
+
+s2:Toggle({
+	Title = "无限跳",
+	Value = false,
+	Callback = function(v)
+		st.jump = v
+	end,
+})
+
+s2:Button({
+	Title = "穿墙",
+	Value = false,
+	Callback = function(v)
+		loadstring(game:HttpGet("https://raw.githubusercontent.com/TtmScripter/OtherScript/main/Noclip"))()
+	end,
+})
+
+local s3 = t1:Section({
+	Title = "功能",
+	Icon = "star",
+})
+
+s3:Button({
+	Title = "激活飞雷神",
+	Callback = function()
+		st.ft_b = true
+	end,
+})
+
+s3:Button({
+	Title = "飞行",
+	Callback = function()
+		loadstring(game:HttpGet("https://raw.githubusercontent.com/XNEOFF/FlyGuiV3/main/FlyGuiV3.txt"))()
+	end,
+})
+
+local t2 = win:Tab({
+	Title = "自瞄",
+	Icon = "crosshair",
+})
+
+local s4 = t2:Section({
+	Title = "主控",
+	Icon = "target",
+})
+
+s4:Toggle({
+	Title = "开启",
+	Value = false,
+	Callback = function(v)
+		st.aim = v
+	end,
+})
+
+s4:Dropdown({
+	Title = "部位",
+	Values = { "Head", "HumanoidRootPart", "UpperTorso" },
+	Value = "Head",
+	Callback = function(v)
+		st.aim_p = v
+	end,
+})
+
+s4:Slider({
+	Title = "范围",
+	Step = 10,
+	Value = { Min = 30, Max = 1000, Default = 200 },
+	Callback = function(v)
+		st.aim_f = v
+	end,
+})
+
+s4:Slider({
+	Title = "平滑",
+	Step = 0.5,
+	Value = { Min = 1, Max = 20, Default = 5 },
+	Callback = function(v)
+		st.aim_s = v
+	end,
+})
+
+s4:Slider({
+	Title = "距离",
+	Step = 50,
+	Value = { Min = 100, Max = 2000, Default = 500 },
+	Callback = function(v)
+		st.aim_d = v
+	end,
+})
+
+local s5 = t2:Section({
+	Title = "名单",
+	Icon = "users",
+})
+
+s5:Toggle({
+	Title = "启用排除",
+	Value = false,
+	Callback = function(v)
+		st.ex_e = v
+	end,
+})
+
+local pd = s5:Dropdown({
+	Title = "列表",
+	Values = {},
+	Multi = true,
+	Callback = function(v)
+		st.ex_l = v
+	end,
+})
+
+s5:Button({
+	Title = "刷新",
+	Callback = function()
+		local t = {}
+		for _, p in pairs(P:GetPlayers()) do
+			if p ~= lp then
+				table.insert(t, p.Name)
+			end
+		end
+		pd:Refresh(t)
+	end,
+})
+
+local t3 = win:Tab({
+	Title = "视觉",
+	Icon = "eye",
+})
+
+local espSection = t3:Section({
+	Title = "透视",
+	Icon = "user-search",
+})
+
+espSection:Toggle({
+	Title = "彩虹",
+	Value = false,
+	Callback = function(v)
+		st.esp = v
+	end,
+})
+
+local s6 = t3:Section({
+	Title = "环境",
+	Icon = "sun",
+})
+
+s6:Button({
+	Title = "去雾",
+	Callback = function()
+		L.FogEnd = 9e9
+		L.FogStart = 0
+	end,
+})
+
+s6:Toggle({
+	Title = "循环去雾",
+	Value = false,
+	Callback = function(v)
+		st.fog = v
+	end,
+})
+
+s6:Toggle({
+	Title = "全亮",
+	Value = false,
+	Callback = function(v)
+		st.fb = v
+	end,
+})
+
+local s7 = t3:Section({
+	Title = "相机",
+	Icon = "camera",
+})
+
+s7:Button({
+	Title = "乱飞激活",
+	Callback = function()
+		st.fc_b = true
+	end,
+})
+
+s7:Slider({
+	Title = "范围",
+	Step = 1,
+	Value = { Min = 1, Max = 120, Default = 70 },
+	Callback = function(v)
+		st.fov_v = v
+		cam.FieldOfView = v
+	end,
+})
+
+s7:Toggle({
+	Title = "锁定",
+	Value = false,
+	Callback = function(v)
+		st.fov_l = v
+	end,
+})
+
+local t4 = win:Tab({
+	Title = "甩飞",
+	Icon = "wind",
+})
+
+local flingSection = t4:Section({
+	Title = "参数",
+	Icon = "settings-2",
+})
+
+flingSection:Slider({
+	Title = "力度",
+	Step = 1000,
+	Value = { Min = 5000, Max = 80000, Default = 30000 },
+	Callback = function(v)
+		st.f_p = v
+	end,
+})
+
+local s8 = t4:Section({
+	Title = "执行",
+	Icon = "play",
+})
+
+local td = s8:Dropdown({
+	Title = "目标",
+	Values = {},
+	Callback = function(v)
+		st.f_t = v
+	end,
+})
+
+s8:Button({
+	Title = "刷新",
+	Callback = function()
+		local t = {}
+		for _, p in pairs(P:GetPlayers()) do
+			if p ~= lp then
+				table.insert(t, p.Name)
+			end
+		end
+		td:Refresh(t)
+	end,
+})
+
+s8:Button({
+	Title = "1.5s",
+	Callback = function()
+		fling(1.5)
+	end,
+})
+
+s8:Button({
+	Title = "5s",
+	Callback = function()
+		fling(5)
+	end,
+})
+
+s8:Button({
+	Title = "10s",
+	Callback = function()
+		fling(10)
+	end,
+})
+
+local t5 = win:Tab({
+	Title = "DOORS",
+	Icon = "door-closed",
+})
+
+local doors1 = t5:Section({
+	Title = "脚本",
+	Icon = "scroll",
+})
+
+doors1:Button({
+	Title = "MS Hax",
+	Callback = function()
+		loadstring(
+			game:HttpGet(
+				"https://raw.githubusercontent.com/TheHunterSolo1/Scripts/refs/heads/main/Protected_2809220311826785.lua.txt"
+			)
+		)()
+	end,
+})
+
+local doors2 = t5:Section({
+	Title = "模式",
+	Icon = "flame",
+})
+
+doors2:Button({
+	Title = "硬核",
+	Callback = function()
+		loadstring(
+			game:HttpGet(
+				"https://raw.githubusercontent.com/daiayday/HardcoreRemastered/refs/heads/main/obf_L6zO2N0sG5ehDHd56JBc5z70TZ2piVOvIqsgE88741HXGrwv7E4qd6c8axu8z4oh.lua.txt"
+			)
+		)()
+	end,
+})
+
+local t6 = win:Tab({
+	Title = "合集",
+	Icon = "library",
+})
+
+local s9 = t6:Section({
+	Title = "常用",
+	Icon = "code-2",
+})
+
+s9:Button({
+	Title = "天空",
+	Callback = function()
+		loadstring(game:HttpGet("https://raw.githubusercontent.com/hdjsjjdgrhj/script-hub/refs/heads/main/skyhub"))()
+	end,
+})
+
+s9:Button({
+	Title = "Dex",
+	Callback = function()
+		loadstring(game:HttpGet("https://raw.githubusercontent.com/infyiff/backup/main/dex.lua"))()
+	end,
+})
+
+s9:Button({
+	Title = "IY",
+	Callback = function()
+		loadstring(game:HttpGet("https://raw.githubusercontent.com/EdgeIY/infiniteyield/master/source"))()
+	end,
+})
+
+s9:Button({
+	Title = "秒互动",
+	Callback = function()
+		conn(PPS.PromptButtonHoldBegan, function(p)
+			pcall(function()
+				p.HoldDuration = 0
+			end)
+		end)
+		for _, v in pairs(W:GetDescendants()) do
+			if v:IsA("ProximityPrompt") then
+				v.HoldDuration = 0
+			end
+		end
+	end,
+})
+
+s9:Button({
+	Title = "Vape V4",
+	Callback = function()
+		loadstring(
+			game:HttpGet("https://raw.githubusercontent.com/7GrandDadPGN/VapeV4ForRoblox/main/NewMainScript.lua", true)
+		)()
+	end,
+})
+
+local t7 = win:Tab({
+	Title = "系统",
+	Icon = "settings",
+})
+
+local sys1 = t7:Section({
+	Title = "界面",
+	Icon = "monitor",
+})
+
+sys1:Dropdown({
+	Title = "热键",
+	Values = { "RightShift", "Insert" },
+	Value = "RightShift",
+	Callback = function(v)
+		st.m_k = Enum.KeyCode[v]
+	end,
+})
+
+local s10 = t7:Section({
+	Title = "配置",
+	Icon = "database",
+})
+
+s10:Input({
+	Title = "名称",
+	Placeholder = "Default",
+	Callback = function(v)
+		st.c_n = v
+	end,
+})
+
+s10:Button({
+	Title = "保存",
+	Callback = function()
+		if writefile then
+			writefile("GX_" .. st.c_n .. ".json", H:JSONEncode(st))
+		end
+	end,
+})
+
+local sys2 = t7:Section({
+	Title = "卸载",
+	Icon = "trash-2",
+})
+
+sys2:Button({
+	Title = "完全卸载",
+	Callback = function()
+		for _, c in pairs(conns) do
+			c:Disconnect()
+		end
+		if fling_conn then
+			fling_conn:Disconnect()
+		end
+		if active_vf then
+			active_vf:Destroy()
+		end
+		if active_att then
+			active_att:Destroy()
+		end
+		R:UnbindFromRenderStep("GX_M")
+		R:UnbindFromRenderStep("GX_G")
+		U.MouseIconEnabled = true
+		U.MouseBehavior = Enum.MouseBehavior.Default
+		gui:Destroy()
+	end,
+})
+
+function fling(dur)
+	if fling_conn then
+		fling_conn:Disconnect()
+	end
+	local t = P:FindFirstChild(st.f_t)
+	if not t or not t.Character then
+		return
+	end
+	local _, r, h = get_char()
+	if not r or not h then
+		return
+	end
+	local old = r.CFrame
+	st.f_a = true
+	h.PlatformStand = true
+	fling_conn = R.Heartbeat:Connect(function()
+		if not st.f_a or not t or not t.Character or not t.Character:FindFirstChild("HumanoidRootPart") then
+			st.f_a = false
+			if fling_conn then
+				fling_conn:Disconnect()
+			end
+			return
+		end
+		local tr = t.Character.HumanoidRootPart
+		r.CFrame = tr.CFrame * CFrame.new(math.sin(tick() * 80) * 2, 0, math.cos(tick() * 80) * 2)
+		r.AssemblyLinearVelocity = Vector3.new(0, st.f_p, 0)
+		r.AssemblyAngularVelocity = Vector3.new(5000, 5000, 5000)
+	end)
+	task.wait(dur)
+	st.f_a = false
+	if fling_conn then
+		fling_conn:Disconnect()
+	end
+	local _, r2, h2 = get_char()
+	if r2 then
+		r2.CFrame = old
+		r2.AssemblyLinearVelocity = Vector3.zero
+	end
+	if h2 then
+		h2.PlatformStand = false
+	end
+end
+
+R.Heartbeat:Connect(function(dt)
+	local char, root, hum = get_char()
+	if not char or not root then
+		if active_vf then
+			active_vf:Destroy()
+			active_vf = nil
+		end
+		return
+	end
+
+	if not st.ghost and st.sp and hum.MoveDirection.Magnitude > 0 then
+		root.CFrame += (hum.MoveDirection * st.sp_v * dt)
+	end
+
+	if not st.ghost and st.sp_phys and hum.MoveDirection.Magnitude > 0 then
+		if not active_vf or active_vf.Parent ~= root then
+			if active_vf then
+				active_vf:Destroy()
+			end
+			if active_att then
+				active_att:Destroy()
+			end
+			active_att = Instance.new("Attachment", root)
+			active_vf = Instance.new("VectorForce", root)
+			active_vf.Attachment0 = active_att
+			active_vf.RelativeTo = Enum.ActuatorRelativeTo.World
+		end
+		active_vf.Force = hum.MoveDirection * (st.sp_v * 10000)
+	else
+		if active_vf then
+			active_vf:Destroy()
+			active_vf = nil
+		end
+		if active_att then
+			active_att:Destroy()
+			active_att = nil
+		end
+	end
+
+	if st.clip then
+		for _, v in pairs(char:GetDescendants()) do
+			if v:IsA("BasePart") and v.CanCollide then
+				v.CanCollide = false
+			end
+		end
+	end
+	if st.fov_l then
+		cam.FieldOfView = st.fov_v
+	end
+	if st.fog then
+		L.FogEnd = 9e9
+		L.FogStart = 0
+	end
+	if st.fb then
+		L.Brightness = 2
+		L.GlobalShadows = false
+		L.OutdoorAmbient = Color3.new(1, 1, 1)
+	end
+	if st.esp then
+		local col = Color3.fromHSV(tick() % 3 / 3, 1, 1)
+		for _, p in pairs(P:GetPlayers()) do
+			if p ~= lp and p.Character then
+				local h = p.Character:FindFirstChild("FGH") or Instance.new("Highlight", p.Character)
+				h.Name = "FGH"
+				h.FillColor = col
+			end
+		end
+	end
+	if st.aim and U:IsMouseButtonPressed(Enum.UserInputType.MouseButton2) then
+		local target, d = nil, st.aim_f
+		for _, p in pairs(P:GetPlayers()) do
+			if p ~= lp and p.Character and (not st.ex_e or not table.find(st.ex_l, p.Name)) then
+				local pt = p.Character:FindFirstChild(st.aim_p)
+				if pt and (pt.Position - root.Position).Magnitude < st.aim_d then
+					local pos, s = cam:WorldToViewportPoint(pt.Position)
+					local m = (Vector2.new(pos.X, pos.Y) - Vector2.new(cam.ViewportSize.X / 2, cam.ViewportSize.Y / 2)).Magnitude
+					if s and m < d then
+						d = m
+						target = pt
+					end
+				end
+			end
+		end
+		if target then
+			cam.CFrame = cam.CFrame:Lerp(CFrame.lookAt(cam.CFrame.Position, target.Position), 1 / st.aim_s)
+		end
+	end
+end)
+
+conn(U.JumpRequest, function()
+	if st.jump then
+		local _, _, h = get_char()
+		if h then
+			h:ChangeState(3)
+		end
+	end
+end)
+
+U.InputBegan:Connect(function(io, g)
+	if not g then
+		if io.KeyCode == st.m_k then
+			toggle_ui(not gui.Enabled)
+		elseif io.KeyCode == Enum.KeyCode.B and st.ft_b then
+			local _, r = get_char()
+			if r then
+				st.ft_m = r.CFrame
+			end
+		elseif io.KeyCode == Enum.KeyCode.N and st.ft_b then
+			local _, r = get_char()
+			if r and st.ft_m then
+				local cur = r.CFrame
+				r.CFrame = st.ft_m
+				st.ft_m = cur
+			end
+		elseif io.KeyCode == Enum.KeyCode.M and st.fc_b then
+			ghost()
+		end
+	end
+end)
